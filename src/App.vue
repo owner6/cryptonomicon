@@ -1,6 +1,7 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-    <!--<div
+    <!--
+    <div
       class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
     >
       <svg
@@ -23,7 +24,8 @@
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         ></path>
       </svg>
-    </div>-->
+    </div>
+    -->
     <div class="container">
       <section>
         <div class="flex">
@@ -35,11 +37,12 @@
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
+                v-on:input="resetTickerExistsState"
                 type="text"
                 name="wallet"
                 id="wallet"
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
-                placeholder="Например WAXP"
+                :placeholder="`Например ${ticker ? ticker : 'WAXP'}`"
               />
             </div>
             <div class="flex bg-white shadow-md p-1 rounded-md flex-wrap">
@@ -64,7 +67,9 @@
                 CHD
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="tickerAlreadyExists" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -72,7 +77,6 @@
           type="button"
           class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
         >
-          <!-- Heroicon name: solid/mail -->
           <svg
             class="-ml-0.5 mr-2 h-6 w-6"
             xmlns="http://www.w3.org/2000/svg"
@@ -91,6 +95,7 @@
 
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
+        {{ sel }}
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
             v-for="t in tickers"
@@ -128,8 +133,12 @@
             </button>
           </div>
         </dl>
-        <hr v-if="false" class="w-full border-t border-gray-600 my-4" />
+        <hr
+          v-if="tickers.length > 0"
+          class="w-full border-t border-gray-600 my-4"
+        />
       </template>
+
       <section v-if="sel" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ sel.name }} - USD
@@ -184,10 +193,22 @@ export default {
       tickers: [],
       sel: null,
       graph: [],
+      tickerAlreadyExists: false,
     };
   },
   methods: {
     add() {
+      if (
+        this.tickers.some(
+          (t) => t.name.toUpperCase() === this.ticker.toUpperCase()
+        )
+      ) {
+        this.tickerAlreadyExists = true;
+        return;
+      }
+
+      this.tickerAlreadyExists = false;
+
       const currentTicker = {
         name: this.ticker,
         price: "-",
@@ -203,8 +224,11 @@ export default {
           (t) => t.name === currentTicker.name
         );
         if (tickerToUpdate) {
-          tickerToUpdate.price =
-            data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+          tickerToUpdate.price = data.USD
+            ? data.USD > 1
+              ? data.USD.toFixed(2)
+              : data.USD.toPrecision(2)
+            : "N/A";
         }
 
         if (this.sel?.name === currentTicker.name) {
@@ -214,13 +238,27 @@ export default {
       this.ticker = "";
     },
 
+    resetTickerExistsState() {
+      this.tickerAlreadyExists = false;
+    },
+
     select(ticker) {
       this.sel = ticker;
       this.graph = [];
     },
 
     handleDelete(tickerToRemove) {
-      this.tickers = this.tickers.filter((t) => t != tickerToRemove);
+      const indexToRemove = this.tickers.findIndex((t) => t === tickerToRemove);
+
+      if (indexToRemove !== -1) {
+        this.tickers.splice(indexToRemove, 1);
+
+        // Проверяем, если удаляемый тикер совпадает с выбранным, сбрасываем выбор
+        if (this.sel && this.sel.name === tickerToRemove.name) {
+          this.sel = null;
+          this.graph = [];
+        }
+      }
     },
 
     normalizeGraph() {
@@ -233,5 +271,3 @@ export default {
   },
 };
 </script>
-
-<style src="./app.css"></style>
