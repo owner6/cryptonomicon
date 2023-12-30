@@ -236,4 +236,4 @@ export default {
 };
 </script>
 
-<style src="./app.css"></style>
+<style src="../dist/css/app.5608a352.css"></style>
