@@ -31,42 +31,29 @@
             <label for="wallet" class="block text-sm font-medium text-gray-700"
               >Тикер {{ ticker }}</label
             >
-            <div class="mt-1 relative rounded-md shadow-md">
+            <div class="relative rounded-md shadow-md">
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
-                v-on:input="resetTickerExistsState"
+                v-on:input="updateAutocomplete"
                 type="text"
                 name="wallet"
                 id="wallet"
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 :placeholder="`Например ${ticker ? ticker : 'WAXP'}`"
               />
-            </div>
-            <div
-              v-if="tickerAlreadyExists"
-              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
-            >
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
-              </span>
+              <div class="absolute z-10 mt-2 bg-white rounded-md shadow-md">
+                <ul>
+                  <span
+                    v-for="result in autocompleteResults.slice(0, 4)"
+                    :key="result.Symbol"
+                    class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
+                    @click="selectAutocompleteResult(result)"
+                  >
+                    {{ result.Symbol }}
+                  </span>
+                </ul>
+              </div>
             </div>
             <div v-if="tickerAlreadyExists" class="text-sm text-red-600">
               Такой тикер уже добавлен
@@ -95,7 +82,7 @@
         </button>
       </section>
 
-      <template v-if="tickers.length">
+      <template v-if="tickers">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
@@ -194,8 +181,24 @@ export default {
       sel: null,
       graph: [],
       tickerAlreadyExists: false,
+      autocompleteResults: [],
     };
   },
+
+  watch: {
+    ticker(newTicker) {
+      if (newTicker) {
+        this.updateAutocomplete();
+      } else {
+        this.autocompleteResults = [];
+      }
+    },
+  },
+
+  created() {
+    this.fetchAutocompleteData();
+  },
+
   methods: {
     add() {
       if (
@@ -215,6 +218,7 @@ export default {
       };
 
       this.tickers.push(currentTicker);
+
       setInterval(async () => {
         const f = await fetch(
           `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=ef8136c38bf142129b04748c1e9f97142f5c175607b577515e874a0c8293259c`
@@ -267,6 +271,51 @@ export default {
       return this.graph.map(
         (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
+    },
+
+    async fetchAutocompleteData() {
+      try {
+        const response = await fetch(
+          "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+        );
+        const data = await response.json();
+        console.log(data.Data);
+
+        this.autocompleteResults = Object.values(data.Data);
+      } catch (error) {
+        console.log("error fetching autocomplete data:", error);
+      }
+    },
+
+    async updateAutocomplete() {
+      const query = this.ticker.toUpperCase();
+
+      if (query.length >= 1) {
+        try {
+          const response = await fetch(
+            `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
+          );
+          const data = await response.json();
+
+          const matchingCoins = Object.values(data.Data).filter(
+            (coin) =>
+              coin.FullName.toUpperCase().startsWith(query) ||
+              coin.Symbol.toUpperCase().startsWith(query)
+          );
+
+          this.autocompleteResults = matchingCoins;
+        } catch (error) {
+          console.log("error fetching autocomplete data:", error);
+          this.autocompleteResults = [];
+        }
+      } else {
+        this.autocompleteResults = [];
+      }
+    },
+
+    selectAutocompleteResult(result) {
+      this.ticker = result.Symbol;
+      this.autocompleteResults = [];
     },
   },
 };
