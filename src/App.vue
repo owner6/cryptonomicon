@@ -35,14 +35,19 @@
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
-                v-on:input="updateAutocomplete"
+                v-on:input="
+                  updateAutocomplete;
+                  resetTickerExistsState();
+                "
                 type="text"
                 name="wallet"
                 id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
-                :placeholder="`Например ${ticker ? ticker : 'WAXP'}`"
+                class="block w-full pr-10 border border-gray-500 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 hover:border-gray-500 sm:text-sm rounded-md"
+                :placeholder="`Например ${ticker ? ticker : 'karbo'}`"
               />
-              <div class="absolute z-10 mt-2 bg-white rounded-md shadow-md">
+              <div
+                class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+              >
                 <ul>
                   <span
                     v-for="result in autocompleteResults.slice(0, 4)"
@@ -82,11 +87,24 @@
         </button>
       </section>
 
-      <template v-if="tickers">
+      <template v-if="tickers.length">
+        <div>
+          <button
+            class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Назад
+          </button>
+          <button
+            class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Вперед
+          </button>
+          <div>Фильтр: <input v-model="filter" /></div>
+        </div>
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="t in tickers"
+            v-for="t in filteredTickers()"
             :key="t.name"
             @click="select(t)"
             :class="sel === t ? 'border-4' : ''"
@@ -126,6 +144,7 @@
           class="w-full border-t border-gray-600 my-4"
         />
       </template>
+
       <section v-if="sel" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ sel.name }} - USD
@@ -182,6 +201,9 @@ export default {
       graph: [],
       tickerAlreadyExists: false,
       autocompleteResults: [],
+      updateInterval: null,
+      page: 1,
+      filter: "",
     };
   },
 
@@ -200,6 +222,10 @@ export default {
   },
 
   methods: {
+    filteredTickers() {
+      return this.tickers.filter((ticker) => ticker.name.includes(this.filter));
+    },
+
     add() {
       if (
         this.tickers.some(
@@ -208,9 +234,9 @@ export default {
       ) {
         this.tickerAlreadyExists = true;
         return;
+      } else {
+        this.tickerAlreadyExists = false;
       }
-
-      this.tickerAlreadyExists = false;
 
       const currentTicker = {
         name: this.ticker,
@@ -218,27 +244,41 @@ export default {
       };
 
       this.tickers.push(currentTicker);
-
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=ef8136c38bf142129b04748c1e9f97142f5c175607b577515e874a0c8293259c`
-        );
+      const updateTickerData = async () => {
+        const f = await fetch(`https://api.coinpaprika.com/v1/tickers`);
         const data = await f.json();
-        const tickerToUpdate = this.tickers.find(
-          (t) => t.name === currentTicker.name
-        );
-        if (tickerToUpdate) {
-          tickerToUpdate.price = data.USD
-            ? data.USD > 1
-              ? data.USD.toFixed(2)
-              : data.USD.toPrecision(2)
-            : "N/A";
-        }
 
-        if (this.sel?.name === currentTicker.name) {
-          this.graph.push(data.USD);
+        if (data) {
+          this.tickers.forEach(async (currentTicker) => {
+            const tickerToUpdate = this.tickers.find(
+              (t) => t.name === currentTicker.name
+            );
+
+            if (tickerToUpdate) {
+              const tickerData = data.find(
+                (ticker) => ticker.symbol === currentTicker.name
+              );
+
+              if (tickerData) {
+                const usdPrice = tickerData.quotes.USD.price;
+                tickerToUpdate.price =
+                  usdPrice > 1 ? usdPrice.toFixed(2) : usdPrice.toPrecision(2);
+              }
+            }
+
+            if (this.sel?.name === currentTicker.name) {
+              this.graph.push(
+                data.find(
+                  (tickerData) => tickerData.symbol === currentTicker.name
+                )?.quotes.USD.price
+              );
+            }
+          });
         }
-      }, 5000);
+      };
+
+      this.updateInterval = setInterval(updateTickerData, 5000); // Use this.updateInterval
+
       this.ticker = "";
     },
 
@@ -257,12 +297,13 @@ export default {
       if (indexToRemove !== -1) {
         this.tickers.splice(indexToRemove, 1);
 
-        // Check if the removed ticker is the currently selected one
         if (this.sel && this.sel.name === tickerToRemove.name) {
           this.sel = null;
           this.graph = [];
         }
       }
+
+      clearInterval(this.updateInterval);
     },
 
     normalizeGraph() {
@@ -275,13 +316,14 @@ export default {
 
     async fetchAutocompleteData() {
       try {
-        const response = await fetch(
-          "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
-        );
+        const response = await fetch("https://api.coinpaprika.com/v1/coins");
         const data = await response.json();
-        console.log(data.Data);
+        this.autocompleteResults = data.map((coin) => ({
+          Symbol: coin.symbol,
+          FullName: coin.name,
+        }));
 
-        this.autocompleteResults = Object.values(data.Data);
+        console.log(this.autocompleteResults);
       } catch (error) {
         console.log("error fetching autocomplete data:", error);
       }
@@ -292,20 +334,21 @@ export default {
 
       if (query.length >= 1) {
         try {
-          const response = await fetch(
-            `https://min-api.cryptocompare.com/data/all/coinlist?summary=true`
-          );
+          const response = await fetch("https://api.coinpaprika.com/v1/coins");
           const data = await response.json();
 
-          const matchingCoins = Object.values(data.Data).filter(
+          const matchingCoins = data.filter(
             (coin) =>
-              coin.FullName.toUpperCase().startsWith(query) ||
-              coin.Symbol.toUpperCase().startsWith(query)
+              coin.name.toUpperCase().startsWith(query) ||
+              coin.symbol.toUpperCase().startsWith(query)
           );
 
-          this.autocompleteResults = matchingCoins;
+          this.autocompleteResults = matchingCoins.map((coin) => ({
+            Symbol: coin.symbol,
+            FullName: coin.name,
+          }));
         } catch (error) {
-          console.log("error fetching autocomplete data:", error);
+          console.log("Error fetching autocomplete data:", error);
           this.autocompleteResults = [];
         }
       } else {
@@ -321,4 +364,4 @@ export default {
 };
 </script>
 
-<style src="../dist/css/app.5608a352.css"></style>
+<style src="../dist/css/app.9fe8d701.css"></style>
