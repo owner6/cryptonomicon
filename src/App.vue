@@ -208,6 +208,7 @@ export default {
           tickerToUpdate.price =
             data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
         }
+        console.log("Data received from API:", data);
 
         if (this.sel?.name === currentTicker.name) {
           this.graph.push(data.USD);
